@@ -18,7 +18,6 @@ export const registrarCategoria = async (req, res) => {
   try {
     const categoriaRef = db.collection('categorias').doc();
     const nuevaCategoria = {
-      
       nombre: nombre.trim(),
       descripcion: descripcion.trim()
     };
