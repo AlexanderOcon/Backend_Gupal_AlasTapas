@@ -47,7 +47,19 @@ export const registrarProducto = async (req, res) => {
   }
 
   try {
+    if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+      return res.status(500).json({
+        mensaje: 'Faltan las variables de configuración de Firebase'
+      });
+    }
+
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'productos';
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return res.status(500).json({
+        mensaje: 'Faltan las variables de configuración de Supabase'
+      });
+    }
+
     const extension = imageFile.originalname.includes('.')
       ? imageFile.originalname.substring(imageFile.originalname.lastIndexOf('.')).toLowerCase()
       : '';
@@ -62,7 +74,7 @@ export const registrarProducto = async (req, res) => {
     if (uploadError) {
       console.error('Error al subir imagen a Supabase:', uploadError);
       return res.status(500).json({
-        mensaje: 'Error al guardar la imagen del producto'
+        mensaje: `Error al guardar la imagen del producto: ${uploadError.message}`
       });
     }
 
@@ -91,7 +103,7 @@ export const registrarProducto = async (req, res) => {
   } catch (error) {
     console.error('Error al registrar producto:', error);
     return res.status(500).json({
-      mensaje: 'Error al registrar el producto'
+      mensaje: `Error al registrar el producto: ${error.message}`
     });
   }
 };
