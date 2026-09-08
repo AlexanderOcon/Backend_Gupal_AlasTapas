@@ -1,5 +1,6 @@
 import db from '../firebase.js';
 import supabase from '../supabase.js';
+import { randomUUID } from 'node:crypto';
 
 export const producto = async (req, res) => {
   res.json({
@@ -8,11 +9,13 @@ export const producto = async (req, res) => {
 };
 
 export const registrarProducto = async (req, res) => {
-  const { nombre, precio, stock, categoriaId } = req.body;
+  const { nombre, precio, stock } = req.body;
+  const categoriaId = req.body.categoria_id || req.body.categoriaId;
+  const imageFile = req.files?.image?.[0] || req.files?.imagen?.[0];
 
-  if (!nombre || precio === undefined || stock === undefined || !categoriaId || !req.file) {
+  if (!nombre || precio === undefined || stock === undefined || !categoriaId || !imageFile) {
     return res.status(400).json({
-      mensaje: 'El nombre, precio, imagen, stock y categoriaId son obligatorios'
+      mensaje: 'El nombre, precio, image, stock y categoria_id son obligatorios'
     });
   }
 
@@ -36,14 +39,14 @@ export const registrarProducto = async (req, res) => {
     }
 
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'productos';
-    const extension = req.file.originalname.includes('.')
-      ? req.file.originalname.substring(req.file.originalname.lastIndexOf('.')).toLowerCase()
+    const extension = imageFile.originalname.includes('.')
+      ? imageFile.originalname.substring(imageFile.originalname.lastIndexOf('.')).toLowerCase()
       : '';
     const imagePath = `${randomUUID()}${extension}`;
     const { error: uploadError } = await supabase.storage
       .from(bucket)
-      .upload(imagePath, req.file.buffer, {
-        contentType: req.file.mimetype,
+      .upload(imagePath, imageFile.buffer, {
+        contentType: imageFile.mimetype,
         upsert: false
       });
 
@@ -56,12 +59,16 @@ export const registrarProducto = async (req, res) => {
 
     const { data: imageData } = supabase.storage.from(bucket).getPublicUrl(imagePath);
     const productoRef = db.collection('productos').doc();
+    const categoria = {
+      id: categoriaSnapshot.id,
+      ...categoriaSnapshot.data()
+    };
     const nuevoProducto = {
       nombre: nombre.trim(),
       precio: precioNumerico,
-      imagen: imageData.publicUrl,
+      image: imageData.publicUrl,
       stock: stockNumerico,
-      categoriaId: categoriaRef.id
+      categoria_id: categoria
     };
 
     await productoRef.set(nuevoProducto);

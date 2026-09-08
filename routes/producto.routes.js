@@ -9,6 +9,13 @@ const upload = multer({
 });
 
 router.get('/producto', producto);
-router.post('/registrarproducto', upload.single('imagen'), registrarProducto);
+router.post(
+	'/registrarproducto',
+	upload.fields([
+		{ name: 'image', maxCount: 1 },
+		{ name: 'imagen', maxCount: 1 }
+	]),
+	registrarProducto
+);
 
 export default router;

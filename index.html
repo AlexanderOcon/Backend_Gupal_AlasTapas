@@ -102,12 +102,12 @@
 
             formData.append("stock", document.getElementById("stock").value);
 
-            formData.append("categoriaId", document.getElementById("categoriaId").value.trim());
+            formData.append("categoria_id", document.getElementById("categoriaId").value.trim());
 
             const imagenInput = document.getElementById('imagen');
 
             if (imagenInput.files.length > 0) {
-                formData.append('imagen', imagenInput.files[0]);
+                formData.append('image', imagenInput.files[0]);
             }
 
             try {
@@ -124,8 +124,8 @@
                     resultadoDiv.innerHTML = 
                         data.mensaje + 
                         (
-                            data.producto && data.producto.imagen
-                            ? `<br><img src="${data.producto.imagen}" style="max-width:100%;margin-top:10px;border-radius:8px;">`
+                            data.producto && data.producto.image
+                            ? `<br><img src="${data.producto.image}" style="max-width:100%;margin-top:10px;border-radius:8px;">`
                             : ""
                         );
                     
