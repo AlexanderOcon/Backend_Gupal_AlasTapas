@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import { producto, registrarProducto } from '../controllers/producto.controller.js';
+import { obtenerProductos, registrarProducto } from '../controllers/producto.controller.js';
 
 const router = express.Router();
 const upload = multer({
@@ -8,7 +8,7 @@ const upload = multer({
 	limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-router.get('/producto', producto);
+router.get('/producto', obtenerProductos);
 router.post(
   '/registrarproducto',
   upload.fields([

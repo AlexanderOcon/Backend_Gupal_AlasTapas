@@ -25,12 +25,28 @@
             border-radius: 8px;
             display: none;
         }
+        .producto-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .producto-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+        }
+        .producto-img {
+            height: 180px;
+            object-fit: cover;
+            border-top-left-radius: 1rem;
+            border-top-right-radius: 1rem;
+        }
+        #listaProductos {
+            min-height: 120px;
+        }
     </style>
 </head>
 <body>
     <div class="container py-5">
-        <div class="row justify-content-center">
-            <div class="col-md-6">
+        <div class="row g-4">
+            <div class="col-lg-5">
                 <div class="card p-4">
                     <h2 class="text-center mb-4">Registro de Producto</h2>
 
@@ -74,11 +90,23 @@
                     <div id="resultado" class="alert mt-4" role="alert"></div>
                 </div>
             </div>
+
+            <div class="col-lg-7">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="mb-0">Productos registrados</h2>
+                    <button class="btn btn-outline-secondary btn-sm" id="btnRecargar" type="button">
+                        Actualizar
+                    </button>
+                </div>
+                <div id="listaProductos" class="row g-3">
+                    <div class="col-12 text-center text-muted">Cargando productos...</div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        const BACKEND_URL = 'https://backend-gupal-alastapas.onrender.com/api/registrarproducto';
+        const BACKEND_URL = 'https://backend-gupal-alastapas.onrender.com/api';
 
         document.getElementById("imagen").addEventListener("change", (e) => {
             const file = e.target.files[0];
@@ -119,7 +147,7 @@
             }
 
             try {
-                const respuesta = await fetch(BACKEND_URL, {
+                const respuesta = await fetch(`${BACKEND_URL}/registrarproducto`, {
                     method: "POST",
                     body: formData
                 });
@@ -145,6 +173,7 @@
                 }
 
                 resultadoDiv.style.display = 'block';
+                cargarProductos();
 
             } catch (error) {
                 console.error(error);
@@ -155,6 +184,61 @@
                 resultadoDiv.style.display = "block";
             }
         });
+
+        function escaparHtml(valor) {
+            return String(valor ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#039;');
+        }
+
+        async function cargarProductos() {
+            const contenedor = document.getElementById('listaProductos');
+            contenedor.innerHTML = '<div class="col-12 text-center text-muted">Cargando productos...</div>';
+
+            try {
+                const respuesta = await fetch(`${BACKEND_URL}/producto`);
+                const productos = await respuesta.json();
+
+                if (!respuesta.ok) {
+                    throw new Error(productos.mensaje || 'No se pudieron obtener los productos');
+                }
+
+                if (productos.length === 0) {
+                    contenedor.innerHTML = '<div class="col-12"><div class="alert alert-info text-center">Aún no hay productos registrados.</div></div>';
+                    return;
+                }
+
+                contenedor.innerHTML = productos.map((producto) => {
+                    const categoria = producto.categoria_id || {};
+                    const imagen = producto.image || 'https://via.placeholder.com/600x400?text=Producto';
+
+                    return `
+                        <div class="col-md-6">
+                            <div class="card producto-card h-100 overflow-hidden">
+                                <img src="${escaparHtml(imagen)}" class="card-img-top producto-img" alt="${escaparHtml(producto.nombre)}">
+                                <div class="card-body">
+                                    <h5 class="card-title">${escaparHtml(producto.nombre)}</h5>
+                                    <p class="card-text mb-1"><strong>Precio:</strong> S/. ${escaparHtml(producto.precio)}</p>
+                                    <p class="card-text mb-1"><strong>Stock:</strong> ${escaparHtml(producto.stock)}</p>
+                                    <p class="card-text text-muted mb-0"><strong>Categoría:</strong> ${escaparHtml(categoria.nombre)}</p>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+            } catch (error) {
+                console.error(error);
+                contenedor.innerHTML = `
+                    <div class="col-12">
+                        <div class="alert alert-danger text-center">Error al cargar los productos. Intenta nuevamente.</div>
+                    </div>`;
+            }
+        }
+
+        document.getElementById('btnRecargar').addEventListener('click', cargarProductos);
+        cargarProductos();
     </script>
 </body>
 </html>

@@ -2,10 +2,22 @@ import db from '../firebase.js';
 import supabase from '../supabase.js';
 import { randomUUID } from 'node:crypto';
 
-export const producto = async (req, res) => {
-  res.json({
-    mensaje: 'Esta es una funcion de prueba del Backend Grupal'
-  });
+export const obtenerProductos = async (req, res) => {
+  try {
+    const snapshot = await db.collection('productos').get();
+    const productos = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    return res.status(200).json(productos);
+  } catch (error) {
+    console.error('Error al obtener productos:', error);
+    return res.status(500).json({
+      mensaje: 'Error al obtener los productos',
+      error: error.message
+    });
+  }
 };
 
 export const registrarProducto = async (req, res) => {
