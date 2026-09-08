@@ -51,8 +51,13 @@
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label">ID de Categoría</label>
-                            <input type="text" class="form-control" id="categoriaId" required placeholder="Ej: categoria123">
+                            <label class="form-label">Nombre de Categoría</label>
+                            <input type="text" class="form-control" id="categoriaNombre" required placeholder="Ej: Hamburguesas">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Descripción de Categoría</label>
+                            <input type="text" class="form-control" id="categoriaDescripcion" required placeholder="Ej: Productos de hamburguesas">
                         </div>
 
                         <div class="mb-3">
@@ -73,7 +78,7 @@
     </div>
 
     <script>
-        const BACKEND_URL = 'https://backend-gupal-alastapas.onrender.com/registrarproducto';
+        const BACKEND_URL = 'https://backend-gupal-alastapas.onrender.com/api/registrarproducto';
 
         document.getElementById("imagen").addEventListener("change", (e) => {
             const file = e.target.files[0];
@@ -102,7 +107,10 @@
 
             formData.append("stock", document.getElementById("stock").value);
 
-            formData.append("categoria_id", document.getElementById("categoriaId").value.trim());
+            formData.append("categoria", JSON.stringify({
+                nombre: document.getElementById("categoriaNombre").value.trim(),
+                descripcion: document.getElementById("categoriaDescripcion").value.trim()
+            }));
 
             const imagenInput = document.getElementById('imagen');
 

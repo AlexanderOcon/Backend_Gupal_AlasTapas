@@ -10,12 +10,30 @@ export const producto = async (req, res) => {
 
 export const registrarProducto = async (req, res) => {
   const { nombre, precio, stock } = req.body;
-  const categoriaId = req.body.categoria_id || req.body.categoriaId;
+  let categoria;
+
+  try {
+    categoria = typeof req.body.categoria === 'string'
+      ? JSON.parse(req.body.categoria)
+      : req.body.categoria;
+  } catch {
+    return res.status(400).json({
+      mensaje: 'La categoria debe ser un objeto JSON valido'
+    });
+  }
+
   const imageFile = req.files?.image?.[0] || req.files?.imagen?.[0];
 
-  if (!nombre || precio === undefined || stock === undefined || !categoriaId || !imageFile) {
+  if (
+    !nombre ||
+    precio === undefined ||
+    stock === undefined ||
+    !categoria?.nombre ||
+    !categoria?.descripcion ||
+    !imageFile
+  ) {
     return res.status(400).json({
-      mensaje: 'El nombre, precio, image, stock y categoria_id son obligatorios'
+      mensaje: 'El nombre, precio, image, stock y categoria (nombre y descripcion) son obligatorios'
     });
   }
 
@@ -29,15 +47,6 @@ export const registrarProducto = async (req, res) => {
   }
 
   try {
-    const categoriaRef = db.collection('categorias').doc(categoriaId);
-    const categoriaSnapshot = await categoriaRef.get();
-
-    if (!categoriaSnapshot.exists) {
-      return res.status(404).json({
-        mensaje: 'La categoria indicada no existe'
-      });
-    }
-
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'productos';
     const extension = imageFile.originalname.includes('.')
       ? imageFile.originalname.substring(imageFile.originalname.lastIndexOf('.')).toLowerCase()
@@ -59,16 +68,15 @@ export const registrarProducto = async (req, res) => {
 
     const { data: imageData } = supabase.storage.from(bucket).getPublicUrl(imagePath);
     const productoRef = db.collection('productos').doc();
-    const categoria = {
-      id: categoriaSnapshot.id,
-      ...categoriaSnapshot.data()
-    };
     const nuevoProducto = {
       nombre: nombre.trim(),
       precio: precioNumerico,
       image: imageData.publicUrl,
       stock: stockNumerico,
-      categoria_id: categoria
+      categoria_id: {
+        nombre: categoria.nombre.trim(),
+        descripcion: categoria.descripcion.trim()
+      }
     };
 
     await productoRef.set(nuevoProducto);
