@@ -2,6 +2,31 @@ import db from '../firebase.js';
 import supabase from '../supabase.js';
 import { randomUUID } from 'node:crypto';
 
+const parseCategoria = (categoriaBody) => {
+  if (categoriaBody === undefined || categoriaBody === null || categoriaBody === '') {
+    return null;
+  }
+
+  if (typeof categoriaBody === 'string') {
+    return JSON.parse(categoriaBody);
+  }
+
+  return categoriaBody;
+};
+
+const validarCategoria = (categoria) => {
+  if (!categoria || typeof categoria !== 'object') {
+    return false;
+  }
+
+  const nombre = typeof categoria.nombre === 'string' ? categoria.nombre.trim() : '';
+  const descripcion = typeof categoria.descripcion === 'string' ? categoria.descripcion.trim() : '';
+
+  return Boolean(nombre && descripcion);
+};
+
+const obtenerBucket = () => process.env.SUPABASE_STORAGE_BUCKET || 'productos';
+
 export const obtenerProductos = async (req, res) => {
   try {
     const snapshot = await db.collection('productos').get();
@@ -25,23 +50,20 @@ export const registrarProducto = async (req, res) => {
   let categoria;
 
   try {
-    categoria = typeof req.body.categoria === 'string'
-      ? JSON.parse(req.body.categoria)
-      : req.body.categoria;
+    categoria = parseCategoria(req.body.categoria);
   } catch {
     return res.status(400).json({
       mensaje: 'La categoria debe ser un objeto JSON valido'
     });
   }
 
-  const imageFile = req.files?.image?.[0] || req.files?.imagen?.[0];
+  const imageFile = req.files?.image?.[0] || req.files?.imagen?.[0] || req.file;
 
   if (
     !nombre ||
     precio === undefined ||
     stock === undefined ||
-    !categoria?.nombre ||
-    !categoria?.descripcion ||
+    !validarCategoria(categoria) ||
     !imageFile
   ) {
     return res.status(400).json({
@@ -52,7 +74,12 @@ export const registrarProducto = async (req, res) => {
   const precioNumerico = Number(precio);
   const stockNumerico = Number(stock);
 
-  if (!Number.isFinite(precioNumerico) || precioNumerico < 0 || !Number.isInteger(stockNumerico) || stockNumerico < 0) {
+  if (
+    !Number.isFinite(precioNumerico) ||
+    precioNumerico < 0 ||
+    !Number.isInteger(stockNumerico) ||
+    stockNumerico < 0
+  ) {
     return res.status(400).json({
       mensaje: 'El precio debe ser un numero mayor o igual a 0 y el stock un entero mayor o igual a 0'
     });
@@ -65,7 +92,7 @@ export const registrarProducto = async (req, res) => {
       });
     }
 
-    const bucket = process.env.SUPABASE_STORAGE_BUCKET || 'productos';
+    const bucket = obtenerBucket();
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return res.status(500).json({
         mensaje: 'Faltan las variables de configuración de Supabase'
@@ -76,6 +103,7 @@ export const registrarProducto = async (req, res) => {
       ? imageFile.originalname.substring(imageFile.originalname.lastIndexOf('.')).toLowerCase()
       : '';
     const imagePath = `${randomUUID()}${extension}`;
+
     const { error: uploadError } = await supabase.storage
       .from(bucket)
       .upload(imagePath, imageFile.buffer, {
@@ -116,6 +144,168 @@ export const registrarProducto = async (req, res) => {
     console.error('Error al registrar producto:', error);
     return res.status(500).json({
       mensaje: `Error al registrar el producto: ${error.message}`
+    });
+  }
+};
+
+export const ActualizarProducto = async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({
+      mensaje: 'El id del producto es obligatorio'
+    });
+  }
+
+  const { nombre, precio, stock } = req.body;
+  let categoria;
+
+  if (req.body.categoria !== undefined) {
+    try {
+      categoria = parseCategoria(req.body.categoria);
+    } catch {
+      return res.status(400).json({
+        mensaje: 'La categoria debe ser un objeto JSON valido'
+      });
+    }
+
+    if (!validarCategoria(categoria)) {
+      return res.status(400).json({
+        mensaje: 'La categoria debe incluir nombre y descripcion validos'
+      });
+    }
+  }
+
+  const imageFile = req.files?.image?.[0] || req.files?.imagen?.[0] || req.file;
+
+  try {
+    const productoRef = db.collection('productos').doc(id);
+    const productoActual = await productoRef.get();
+
+    if (!productoActual.exists) {
+      return res.status(404).json({
+        mensaje: 'Producto no encontrado'
+      });
+    }
+
+    const productoActualizado = {
+      ...productoActual.data()
+    };
+
+    if (nombre !== undefined) {
+      const nombreLimpio = String(nombre).trim();
+      if (!nombreLimpio) {
+        return res.status(400).json({
+          mensaje: 'El nombre no puede estar vacio'
+        });
+      }
+      productoActualizado.nombre = nombreLimpio;
+    }
+
+    if (precio !== undefined) {
+      const precioNumerico = Number(precio);
+      if (!Number.isFinite(precioNumerico) || precioNumerico < 0) {
+        return res.status(400).json({
+          mensaje: 'El precio debe ser un numero mayor o igual a 0'
+        });
+      }
+      productoActualizado.precio = precioNumerico;
+    }
+
+    if (stock !== undefined) {
+      const stockNumerico = Number(stock);
+      if (!Number.isInteger(stockNumerico) || stockNumerico < 0) {
+        return res.status(400).json({
+          mensaje: 'El stock debe ser un entero mayor o igual a 0'
+        });
+      }
+      productoActualizado.stock = stockNumerico;
+    }
+
+    if (categoria) {
+      productoActualizado.categoria_id = {
+        nombre: categoria.nombre.trim(),
+        descripcion: categoria.descripcion.trim()
+      };
+    }
+
+    if (imageFile) {
+      const bucket = obtenerBucket();
+      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return res.status(500).json({
+          mensaje: 'Faltan las variables de configuración de Supabase'
+        });
+      }
+
+      const extension = imageFile.originalname.includes('.')
+        ? imageFile.originalname.substring(imageFile.originalname.lastIndexOf('.')).toLowerCase()
+        : '';
+      const imagePath = `${randomUUID()}${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(imagePath, imageFile.buffer, {
+          contentType: imageFile.mimetype,
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Error al actualizar la imagen del producto:', uploadError);
+        return res.status(500).json({
+          mensaje: `Error al guardar la imagen del producto: ${uploadError.message}`
+        });
+      }
+
+      const { data: imageData } = supabase.storage.from(bucket).getPublicUrl(imagePath);
+      productoActualizado.image = imageData.publicUrl;
+    }
+
+    await productoRef.update(productoActualizado);
+
+    return res.status(200).json({
+      mensaje: 'Producto actualizado correctamente',
+      producto: {
+        id,
+        ...productoActualizado
+      }
+    });
+  } catch (error) {
+    console.error('Error al actualizar producto:', error);
+    return res.status(500).json({
+      mensaje: `Error al actualizar el producto: ${error.message}`
+    });
+  }
+};
+
+export const eliminarProducto = async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({
+      mensaje: 'El id del producto es obligatorio'
+    });
+  }
+
+  try {
+    const productoRef = db.collection('productos').doc(id);
+    const productoActual = await productoRef.get();
+
+    if (!productoActual.exists) {
+      return res.status(404).json({
+        mensaje: 'Producto no encontrado'
+      });
+    }
+
+    await productoRef.delete();
+
+    return res.status(200).json({
+      mensaje: 'Producto eliminado correctamente',
+      id
+    });
+  } catch (error) {
+    console.error('Error al eliminar producto:', error);
+    return res.status(500).json({
+      mensaje: `Error al eliminar el producto: ${error.message}`
     });
   }
 };
