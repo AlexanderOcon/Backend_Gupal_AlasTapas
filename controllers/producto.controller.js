@@ -309,3 +309,46 @@ export const eliminarProducto = async (req, res) => {
     });
   }
 };
+export const buscarProductos = async (req, res) => {
+  try {
+    const { q } = req.query;
+
+    if (typeof q !== 'string' || q.trim() === '') {
+      return res.status(400).json({
+        mensaje: 'Debes enviar un término de búsqueda (parámetro q).'
+      });
+    }
+
+    const termino = q.trim().toLowerCase();
+    const snapshot = await db.collection('productos').get();
+
+    const productos = snapshot.docs
+      .map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      }))
+      .filter((producto) => {
+        const categoria = producto.categoria_id || {};
+        const valores = [
+          producto.nombre,
+          producto.precio,
+          producto.image,
+          producto.stock,
+          categoria.nombre,
+          categoria.descripcion
+        ];
+
+        return valores.some((valor) =>
+          String(valor ?? '').toLowerCase().includes(termino)
+        );
+      });
+
+    return res.status(200).json(productos);
+  } catch (error) {
+    console.error('Error al buscar productos:', error);
+    return res.status(500).json({
+      mensaje: 'Error al buscar los productos',
+      error: error.message
+    });
+  }
+};
