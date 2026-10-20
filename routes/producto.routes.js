@@ -1,8 +1,11 @@
 import express from 'express';
 import multer from 'multer';
 import { obtenerProductos, registrarProducto, ActualizarProducto, eliminarProducto, buscarProductos } from '../controllers/producto.controller.js';
+import { capturarInfoSolicitud } from "../middlewares/auditoria.js";
 
 const router = express.Router();
+router.use(capturarInfoSolicitud);   // aplica a todas las rutas de este router
+
 const upload = multer({
 	storage: multer.memoryStorage(),
 	limits: { fileSize: 5 * 1024 * 1024 }

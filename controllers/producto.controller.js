@@ -132,6 +132,13 @@ export const registrarProducto = async (req, res) => {
     };
 
     await productoRef.set(nuevoProducto);
+    await guardarAuditoria({
+      accion: 'crear',
+      productoId: productoRef.id,
+      valoresAnteriores: null,
+      valoresNuevos: nuevoProducto,
+      req
+    });
 
     return res.status(201).json({
       mensaje: 'Producto registrado correctamente',
@@ -188,8 +195,9 @@ export const ActualizarProducto = async (req, res) => {
       });
     }
 
+    const datosAnteriores = productoActual.data();
     const productoActualizado = {
-      ...productoActual.data()
+      ...datosAnteriores
     };
 
     if (nombre !== undefined) {
@@ -261,6 +269,25 @@ export const ActualizarProducto = async (req, res) => {
     }
 
     await productoRef.update(productoActualizado);
+    await guardarAuditoria({
+      accion: 'actualizar',
+      productoId: id,
+      valoresAnteriores: {
+        nombre: datosAnteriores.nombre,
+        precio: datosAnteriores.precio,
+        image: datosAnteriores.image,
+        stock: datosAnteriores.stock,
+        categoria_id: datosAnteriores.categoria_id
+      },
+      valoresNuevos: {
+        nombre: productoActualizado.nombre,
+        precio: productoActualizado.precio,
+        image: productoActualizado.image,
+        stock: productoActualizado.stock,
+        categoria_id: productoActualizado.categoria_id
+      },
+      req
+    });
 
     return res.status(200).json({
       mensaje: 'Producto actualizado correctamente',
@@ -296,7 +323,21 @@ export const eliminarProducto = async (req, res) => {
       });
     }
 
+    const datosAnteriores = productoActual.data();
     await productoRef.delete();
+    await guardarAuditoria({
+      accion: 'eliminar',
+      productoId: id,
+      valoresAnteriores: {
+        nombre: datosAnteriores.nombre,
+        precio: datosAnteriores.precio,
+        image: datosAnteriores.image,
+        stock: datosAnteriores.stock,
+        categoria_id: datosAnteriores.categoria_id
+      },
+      valoresNuevos: null,
+      req
+    });
 
     return res.status(200).json({
       mensaje: 'Producto eliminado correctamente',
@@ -350,5 +391,29 @@ export const buscarProductos = async (req, res) => {
       mensaje: 'Error al buscar los productos',
       error: error.message
     });
+  }
+};
+export const guardarAuditoria = async ({
+  accion,
+  productoId,
+  valoresAnteriores = null,
+  valoresNuevos = null,
+  req,
+}) => {
+  try {
+    await db.collection("auditoria_productos").add({
+      accion,
+      productoId: productoId || null,
+      fecha: new Date().toISOString(),
+      ip: req.auditoria?.ip || "desconocida",
+      userAgent: req.auditoria?.userAgent || "desconocido",
+      metodo: req.auditoria?.metodo || req.method,
+      ruta: req.auditoria?.ruta || req.originalUrl,
+      valoresAnteriores,
+      valoresNuevos,
+    });
+  } catch (err) {
+    // No rompemos la operación principal si falla el log
+    console.error("Error al guardar auditoría:", err.message);
   }
 };
