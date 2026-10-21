@@ -42,32 +42,32 @@ const enviarCSV = (res, nombre, encabezados, filas) => {
   res.end(contenido);
 };
 
+const exportarColeccionCSV = async (res, coleccion, nombreArchivo) => {
+  const snapshot = await db.collection(coleccion).get();
+  if (snapshot.empty) {
+    return res.status(404).json({
+      mensaje: `No hay documentos en la colección "${coleccion}" de Firebase.`
+    });
+  }
+
+  const documentos = snapshot.docs.map((doc) => ({
+    ...doc.data(),
+    id: doc.id,
+  }));
+  const campos = [
+    ...new Set(documentos.flatMap((documento) => Object.keys(documento))),
+  ];
+  const encabezados = ["ID", ...campos.filter((campo) => campo !== "id")];
+  const filas = documentos.map((documento) =>
+    encabezados.map((campo) => documento[campo])
+  );
+
+  enviarCSV(res, nombreArchivo, encabezados, filas);
+};
+
 export const exportarProductosCSV = async (req, res) => {
   try {
-    const snapshot = await db.collection("productos").get();
-    const encabezados = [
-      "ID",
-      "Nombre",
-      "Precio",
-      "Stock",
-      "Categoría",
-      "Descripción de categoría",
-      "Imagen",
-    ];
-    const filas = snapshot.docs.map((doc) => {
-      const producto = doc.data();
-      return [
-        doc.id,
-        producto.nombre,
-        producto.precio,
-        producto.stock,
-        producto.categoria_id?.nombre,
-        producto.categoria_id?.descripcion,
-        producto.image,
-      ];
-    });
-
-    enviarCSV(res, "productos", encabezados, filas);
+    await exportarColeccionCSV(res, "productos", "productos");
   } catch (error) {
     console.error("Error al exportar productos a CSV:", error);
     res.status(500).json({
@@ -79,18 +79,7 @@ export const exportarProductosCSV = async (req, res) => {
 
 export const exportarPedidosCSV = async (req, res) => {
   try {
-    const snapshot = await db.collection("pedidos").get();
-    const pedidos = snapshot.docs.map((doc) => ({
-      ...doc.data(),
-      id: doc.id,
-    }));
-    const campos = [...new Set(pedidos.flatMap((pedido) => Object.keys(pedido)))];
-    const encabezados = ["ID", ...campos.filter((campo) => campo !== "id")];
-    const filas = pedidos.map((pedido) =>
-      encabezados.map((campo) => pedido[campo])
-    );
-
-    enviarCSV(res, "pedidos", encabezados, filas);
+    await exportarColeccionCSV(res, "pedidos", "pedidos");
   } catch (error) {
     console.error("Error al exportar pedidos a CSV:", error);
     res.status(500).json({
@@ -102,28 +91,7 @@ export const exportarPedidosCSV = async (req, res) => {
 
 export const exportarUsuariosCSV = async (req, res) => {
   try {
-    const snapshot = await db.collection("usuario").get();
-    const encabezados = [
-      "ID",
-      "Nombre",
-      "Apellido",
-      "Teléfono",
-      "Carrito",
-      "Direcciones",
-    ];
-    const filas = snapshot.docs.map((doc) => {
-      const usuario = doc.data();
-      return [
-        doc.id,
-        usuario.nombre,
-        usuario.apellido,
-        usuario.telefono,
-        usuario.carrito,
-        usuario.direcciones,
-      ];
-    });
-
-    enviarCSV(res, "usuarios", encabezados, filas);
+    await exportarColeccionCSV(res, "usuario", "usuarios");
   } catch (error) {
     console.error("Error al exportar usuarios a CSV:", error);
     res.status(500).json({
