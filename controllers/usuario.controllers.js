@@ -91,7 +91,7 @@ const validarDirecciones = (direcciones) => {
 
 export const obtenerUsuarios = async (req, res) => {
   try {
-    const snapshot = await db.collection('usuario').get();
+    const snapshot = await db.collection('usuarios').get();
     const usuario = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data()
@@ -124,7 +124,7 @@ export const registrarUsuario = async (req, res) => {
   }
 
   try {
-    const usuarioRef = db.collection('usuario').doc();
+    const usuarioRef = db.collection('usuarios').doc();
     const nuevoUsuario = {
       nombre: nombreLimpio,
       apellido: apellidoLimpio,
@@ -160,7 +160,7 @@ export const actualizarUsuario = async (req, res) => {
   }
 
   try {
-    const usuarioRef = db.collection('usuario').doc(id);
+    const usuarioRef = db.collection('usuarios').doc(id);
     const usuarioActual = await usuarioRef.get();
 
     if (!usuarioActual.exists) {
@@ -246,7 +246,7 @@ export const eliminarUsuario = async (req, res) => {
   }
 
   try {
-    const usuarioRef = db.collection('usuario').doc(id);
+    const usuarioRef = db.collection('usuarios').doc(id);
     const usuarioActual = await usuarioRef.get();
 
     if (!usuarioActual.exists) {

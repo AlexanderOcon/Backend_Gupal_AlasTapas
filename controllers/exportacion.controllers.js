@@ -79,7 +79,7 @@ export const exportarProductosCSV = async (req, res) => {
 
 export const exportarPedidosCSV = async (req, res) => {
   try {
-    await exportarColeccionCSV(res, "pedidos", "pedidos");
+    await exportarColeccionCSV(res, "pedido", "pedidos");
   } catch (error) {
     console.error("Error al exportar pedidos a CSV:", error);
     res.status(500).json({
@@ -91,7 +91,7 @@ export const exportarPedidosCSV = async (req, res) => {
 
 export const exportarUsuariosCSV = async (req, res) => {
   try {
-    await exportarColeccionCSV(res, "usuario", "usuarios");
+    await exportarColeccionCSV(res, "usuarios", "usuarios");
   } catch (error) {
     console.error("Error al exportar usuarios a CSV:", error);
     res.status(500).json({

@@ -14,7 +14,7 @@ const obtenerProductoEmbebido = async (productoId) => {
 };
 
 const existeUsuario = async (usuarioId) => {
-  const usuarioSnapshot = await db.collection('usuario').doc(usuarioId).get();
+  const usuarioSnapshot = await db.collection('usuarios').doc(usuarioId).get();
   return usuarioSnapshot.exists;
 };
 
@@ -25,7 +25,7 @@ const normalizarFecha = (fecha) => {
 
 export const obtenerPedidos = async (req, res) => {
   try {
-    const snapshot = await db.collection('pedidos').get();
+    const snapshot = await db.collection('pedido').get();
     const pedidos = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data()
@@ -43,7 +43,7 @@ export const obtenerPedidos = async (req, res) => {
 
 export const obtenerPedidoPorId = async (req, res) => {
   try {
-    const pedidoSnapshot = await db.collection('pedidos').doc(req.params.id).get();
+    const pedidoSnapshot = await db.collection('pedido').doc(req.params.id).get();
 
     if (!pedidoSnapshot.exists) {
       return res.status(404).json({ mensaje: 'Pedido no encontrado' });
@@ -89,7 +89,7 @@ export const registrarPedido = async (req, res) => {
       return res.status(404).json({ mensaje: 'Usuario no encontrado' });
     }
 
-    const pedidoRef = db.collection('pedidos').doc();
+    const pedidoRef = db.collection('pedido').doc();
     const nuevoPedido = {
       fecha_pedido: fecha,
       producto,
@@ -144,7 +144,7 @@ export const actualizarPedido = async (req, res) => {
   }
 
   try {
-    const pedidoRef = db.collection('pedidos').doc(req.params.id);
+    const pedidoRef = db.collection('pedido').doc(req.params.id);
     const pedidoSnapshot = await pedidoRef.get();
 
     if (!pedidoSnapshot.exists) {
@@ -187,7 +187,7 @@ export const actualizarPedido = async (req, res) => {
 
 export const eliminarPedido = async (req, res) => {
   try {
-    const pedidoRef = db.collection('pedidos').doc(req.params.id);
+    const pedidoRef = db.collection('pedido').doc(req.params.id);
     const pedidoSnapshot = await pedidoRef.get();
 
     if (!pedidoSnapshot.exists) {
