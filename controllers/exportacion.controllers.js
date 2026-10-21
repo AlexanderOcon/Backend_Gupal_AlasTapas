@@ -1,5 +1,137 @@
 import ExcelJS from "exceljs";
 import { calcularEstadisticas } from "./estadisticas.controller.js";
+import db from "../firebase.js";
+
+const escaparCSV = (valor) => {
+  if (valor === null || valor === undefined) {
+    return "";
+  }
+
+  let texto;
+  if (valor instanceof Date) {
+    texto = valor.toLocaleString("es-ES");
+  } else if (typeof valor?.toDate === "function") {
+    texto = valor.toDate().toLocaleString("es-ES");
+  } else if (typeof valor === "object") {
+    texto = JSON.stringify(valor, (clave, elemento) => {
+      if (elemento && typeof elemento.toDate === "function") {
+        return elemento.toDate().toISOString();
+      }
+      return elemento;
+    });
+  } else {
+    texto = String(valor);
+  }
+
+  return /[",\r\n]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+};
+
+const enviarCSV = (res, nombre, encabezados, filas) => {
+  const contenido = [
+    encabezados.map(escaparCSV).join(","),
+    ...filas.map((fila) => fila.map(escaparCSV).join(",")),
+  ].join("\n");
+  const fecha = new Date().toISOString().slice(0, 10);
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${nombre}-${fecha}.csv"`
+  );
+  res.write("\uFEFF");
+  res.end(contenido);
+};
+
+export const exportarProductosCSV = async (req, res) => {
+  try {
+    const snapshot = await db.collection("productos").get();
+    const encabezados = [
+      "ID",
+      "Nombre",
+      "Precio",
+      "Stock",
+      "Categoría",
+      "Descripción de categoría",
+      "Imagen",
+    ];
+    const filas = snapshot.docs.map((doc) => {
+      const producto = doc.data();
+      return [
+        doc.id,
+        producto.nombre,
+        producto.precio,
+        producto.stock,
+        producto.categoria_id?.nombre,
+        producto.categoria_id?.descripcion,
+        producto.image,
+      ];
+    });
+
+    enviarCSV(res, "productos", encabezados, filas);
+  } catch (error) {
+    console.error("Error al exportar productos a CSV:", error);
+    res.status(500).json({
+      mensaje: "Error al generar el archivo CSV de productos.",
+      error: error.message,
+    });
+  }
+};
+
+export const exportarPedidosCSV = async (req, res) => {
+  try {
+    const snapshot = await db.collection("pedidos").get();
+    const pedidos = snapshot.docs.map((doc) => ({
+      ...doc.data(),
+      id: doc.id,
+    }));
+    const campos = [...new Set(pedidos.flatMap((pedido) => Object.keys(pedido)))];
+    const encabezados = ["ID", ...campos.filter((campo) => campo !== "id")];
+    const filas = pedidos.map((pedido) =>
+      encabezados.map((campo) => pedido[campo])
+    );
+
+    enviarCSV(res, "pedidos", encabezados, filas);
+  } catch (error) {
+    console.error("Error al exportar pedidos a CSV:", error);
+    res.status(500).json({
+      mensaje: "Error al generar el archivo CSV de pedidos.",
+      error: error.message,
+    });
+  }
+};
+
+export const exportarUsuariosCSV = async (req, res) => {
+  try {
+    const snapshot = await db.collection("usuario").get();
+    const encabezados = [
+      "ID",
+      "Nombre",
+      "Apellido",
+      "Teléfono",
+      "Carrito",
+      "Direcciones",
+    ];
+    const filas = snapshot.docs.map((doc) => {
+      const usuario = doc.data();
+      return [
+        doc.id,
+        usuario.nombre,
+        usuario.apellido,
+        usuario.telefono,
+        usuario.carrito,
+        usuario.direcciones,
+      ];
+    });
+
+    enviarCSV(res, "usuarios", encabezados, filas);
+  } catch (error) {
+    console.error("Error al exportar usuarios a CSV:", error);
+    res.status(500).json({
+      mensaje: "Error al generar el archivo CSV de usuarios.",
+      error: error.message,
+    });
+  }
+};
 
 export const exportarEstadisticasExcel = async (req, res) => {
   try {

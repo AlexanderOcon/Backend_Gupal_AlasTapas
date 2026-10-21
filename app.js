@@ -5,6 +5,8 @@ import productoRoutes from './routes/producto.routes.js';
 import rateLimit from "express-rate-limit";
 import db from "./firebase.js";  // Para el registro de la bitácora
 import estadisticasRoutes from "./routes/estadisticas.routes.js";
+import usuarioRoutes from "./routes/usuario.routes.js";
+import pedidoRoutes from "./routes/pedido.routes.js";
 
 
 
@@ -45,6 +47,8 @@ app.use(express.json());
 
 app.use(infoRoutes);
 app.use('/api', productoRoutes);
+app.use('/api', usuarioRoutes);
+app.use('/api', pedidoRoutes);
 app.use(estadisticasRoutes);
 app.use('/api', estadisticasRoutes);
 
