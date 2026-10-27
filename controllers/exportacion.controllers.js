@@ -2,6 +2,248 @@ import ExcelJS from "exceljs";
 import { calcularEstadisticas } from "./estadisticas.controller.js";
 import db from "../firebase.js";
 
+const COLECCIONES_EXPORTABLES = new Set(["productos", "pedido", "usuarios"]);
+
+const normalizarValorExportacion = (valor) => {
+  const normalizarEscalar = (elemento) => {
+    if (elemento === null || elemento === undefined) {
+      return elemento;
+    }
+
+    if (elemento instanceof Date) {
+      return elemento.toISOString();
+    }
+
+    if (typeof elemento.toDate === "function") {
+      return elemento.toDate().toISOString();
+    }
+
+    if (ArrayBuffer.isView(elemento)) {
+      return Buffer.from(
+        elemento.buffer,
+        elemento.byteOffset,
+        elemento.byteLength
+      ).toString("base64");
+    }
+
+    if (elemento instanceof ArrayBuffer) {
+      return Buffer.from(elemento).toString("base64");
+    }
+
+    if (
+      typeof elemento.path === "string" &&
+      elemento.firestore &&
+      typeof elemento.get === "function"
+    ) {
+      return elemento.path;
+    }
+
+    return elemento;
+  };
+
+  const raiz = normalizarEscalar(valor);
+  if (raiz === null || typeof raiz !== "object") {
+    return raiz;
+  }
+
+  const visitados = new WeakSet([raiz]);
+  const resultado = Array.isArray(raiz) ? new Array(raiz.length) : {};
+  const pendientes = [{ origen: raiz, destino: resultado }];
+
+  while (pendientes.length > 0) {
+    const { origen, destino } = pendientes.pop();
+    const entradas = Array.isArray(origen)
+      ? origen.map((elemento, indice) => [indice, elemento])
+      : Object.entries(origen);
+
+    for (const [clave, valorActual] of entradas) {
+      const valorNormalizado = normalizarEscalar(valorActual);
+
+      if (valorNormalizado === null || typeof valorNormalizado !== "object") {
+        destino[clave] = valorNormalizado;
+        continue;
+      }
+
+      if (visitados.has(valorNormalizado)) {
+        destino[clave] = "[Referencia circular o repetida]";
+        continue;
+      }
+
+      visitados.add(valorNormalizado);
+      const contenedor = Array.isArray(valorNormalizado)
+        ? new Array(valorNormalizado.length)
+        : {};
+      destino[clave] = contenedor;
+      pendientes.push({ origen: valorNormalizado, destino: contenedor });
+    }
+  }
+
+  return resultado;
+};
+
+const obtenerDatosColeccionExportacion = async (coleccion) => {
+  const snapshot = await db.collection(coleccion).get();
+  return snapshot.docs.map((doc) => ({
+    ...normalizarValorExportacion(doc.data()),
+    id: doc.id
+  }));
+};
+
+const textoValorExportacion = (valor) => {
+  if (valor === null || valor === undefined || valor === "") {
+    return "—";
+  }
+
+  const texto = typeof valor === "object" ? JSON.stringify(valor) : String(valor);
+  return texto.replace(/\r?\n/g, "\\n");
+};
+
+const escaparIdentificadorSQL = (identificador) =>
+  `"${identificador.replace(/"/g, '""')}"`;
+
+const escaparValorSQL = (valor) => {
+  if (valor === null || valor === undefined) {
+    return "NULL";
+  }
+
+  if (typeof valor === "number" && Number.isFinite(valor)) {
+    return String(valor);
+  }
+
+  if (typeof valor === "boolean") {
+    return valor ? "1" : "0";
+  }
+
+  const texto = typeof valor === "object" ? JSON.stringify(valor) : String(valor);
+  return `'${texto.replace(/'/g, "''")}'`;
+};
+
+const tipoColumnaSQL = (documentos, columna) => {
+  const tipos = new Set(
+    documentos
+      .map((documento) => documento[columna])
+      .filter((valor) => valor !== null && valor !== undefined)
+      .map((valor) => {
+        if (typeof valor === "number" && Number.isFinite(valor)) {
+          return "REAL";
+        }
+        return typeof valor === "boolean" ? "INTEGER" : "TEXT";
+      })
+  );
+
+  return tipos.size === 1 ? [...tipos][0] : "TEXT";
+};
+
+const responderErrorExportacion = (res, formato, error) => {
+  console.error(`Error al exportar colección (${formato}):`, error);
+  return res.status(500).json({
+    mensaje: `Error al generar la exportación ${formato}.`,
+    error: error.message
+  });
+};
+
+const exportarColeccion = async (req, res, formato) => {
+  const { coleccion } = req.params;
+
+  if (!COLECCIONES_EXPORTABLES.has(coleccion)) {
+    return res.status(404).json({
+      mensaje: "La colección solicitada no está disponible para exportación."
+    });
+  }
+
+  try {
+    const documentos = await obtenerDatosColeccionExportacion(coleccion);
+    const fechaGeneracion = new Date();
+
+    if (formato === "txt") {
+      const contenido = documentos.length
+        ? [
+            `LISTADO DE ${coleccion.toUpperCase()} (${documentos.length})`,
+            `Generado: ${fechaGeneracion.toLocaleString("es-ES")}`,
+            "─".repeat(40),
+            "",
+            ...documentos.flatMap((documento, indice) => [
+              `${indice + 1}. Registro ${documento.id}`,
+              ...Object.entries(documento).map(
+                ([campo, valor]) =>
+                  `   ${campo}: ${textoValorExportacion(valor)}`
+              ),
+              ""
+            ])
+          ].join("\n")
+        : `No hay registros en la colección "${coleccion}".`;
+
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${coleccion}-lista.txt"`
+      );
+      return res.status(200).send(contenido);
+    }
+
+    if (formato === "json") {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${coleccion}.json"`
+      );
+      return res.status(200).send(JSON.stringify(documentos, null, 2));
+    }
+
+    const columnas = [
+      "id",
+      ...new Set(documentos.flatMap((documento) => Object.keys(documento)))
+    ];
+    const definicionesColumnas = columnas.map((columna) => {
+      const tipo = columna === "id" ? "TEXT" : tipoColumnaSQL(documentos, columna);
+      const clavePrimaria = columna === "id" ? " PRIMARY KEY" : "";
+      return `  ${escaparIdentificadorSQL(columna)} ${tipo}${clavePrimaria}`;
+    });
+    const tabla = escaparIdentificadorSQL(coleccion);
+    const lineasSQL = [
+      `-- Exportación de la colección ${coleccion}`,
+      `-- Generado: ${fechaGeneracion.toISOString()}`,
+      `-- Total de registros: ${documentos.length}`,
+      "",
+      `CREATE TABLE IF NOT EXISTS ${tabla} (`,
+      definicionesColumnas.join(",\n"),
+      ");",
+      ""
+    ];
+
+    if (documentos.length === 0) {
+      lineasSQL.push(`-- No hay registros para insertar en ${coleccion}.`);
+    } else {
+      documentos.forEach((documento) => {
+        const valores = columnas.map((columna) =>
+          escaparValorSQL(documento[columna])
+        );
+        lineasSQL.push(
+          `INSERT INTO ${tabla} (${columnas.map(escaparIdentificadorSQL).join(", ")}) VALUES (${valores.join(", ")});`
+        );
+      });
+    }
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${coleccion}-export.sql"`
+    );
+    return res.status(200).send(lineasSQL.join("\n"));
+  } catch (error) {
+    return responderErrorExportacion(res, formato, error);
+  }
+};
+
+export const exportarColeccionTXT = (req, res) =>
+  exportarColeccion(req, res, "txt");
+
+export const exportarColeccionJSON = (req, res) =>
+  exportarColeccion(req, res, "json");
+
+export const exportarColeccionSQL = (req, res) =>
+  exportarColeccion(req, res, "sql");
+
 const escaparCSV = (valor) => {
   if (valor === null || valor === undefined) {
     return "";
