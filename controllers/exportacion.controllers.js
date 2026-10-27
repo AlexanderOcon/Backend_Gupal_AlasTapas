@@ -279,3 +279,146 @@ export const exportarEstadisticasExcel = async (req, res) => {
     });
   }
 };
+
+
+const aplanarCampos = (valor) => {
+  const campos = {};
+  const pendientes = [{ valor, prefijo: "" }];
+  const visitados = new WeakSet();
+
+  while (pendientes.length > 0) {
+    const actual = pendientes.pop();
+    const { valor: valorActual, prefijo } = actual;
+
+    if (valorActual === null || valorActual === undefined) {
+      campos[prefijo] = "";
+      continue;
+    }
+
+    if (typeof valorActual?.toDate === "function") {
+      campos[prefijo] = valorActual.toDate().toISOString();
+      continue;
+    }
+
+    if (valorActual instanceof Date) {
+      campos[prefijo] = valorActual.toISOString();
+      continue;
+    }
+
+    if (ArrayBuffer.isView(valorActual)) {
+      campos[prefijo] = Buffer.from(valorActual).toString("base64");
+      continue;
+    }
+
+    if (typeof valorActual === "object") {
+      if (visitados.has(valorActual)) {
+        campos[prefijo] = "[Referencia circular o repetida]";
+        continue;
+      }
+      visitados.add(valorActual);
+
+      const entradas = Array.isArray(valorActual)
+        ? valorActual.map((elemento, indice) => [String(indice + 1), elemento])
+        : Object.entries(valorActual);
+      if (entradas.length === 0) {
+        campos[prefijo] = "";
+        continue;
+      }
+
+      entradas.forEach(([clave, elemento]) => {
+        pendientes.push({
+          valor: elemento,
+          prefijo: prefijo ? `${prefijo}_${clave}` : clave
+        });
+      });
+      continue;
+    }
+
+    campos[prefijo] =
+      typeof valorActual === "bigint" || typeof valorActual === "symbol" ||
+      typeof valorActual === "function"
+        ? String(valorActual)
+        : typeof valorActual === "number" && !Number.isFinite(valorActual)
+          ? String(valorActual)
+          : valorActual;
+  }
+
+  return campos;
+};
+
+export const exportarOlapExcel = async (req, res) => {
+  try {
+    const [snapshotPedidos, snapshotUsuarios, snapshotProductos] = await Promise.all([
+      db.collection("pedido").get(),
+      db.collection("usuarios").get(),
+      db.collection("productos").get()
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = "Sistema de Productos";
+    workbook.created = new Date();
+
+    const agregarHojaColeccion = (nombre, documentos) => {
+      const filas = documentos.map((doc) =>
+        aplanarCampos({ ...doc.data(), id: doc.id })
+      );
+      const encabezados = [
+        ...new Set(["id", ...filas.flatMap((fila) => Object.keys(fila))])
+      ];
+      const filasExcel = filas.map((fila) =>
+        encabezados.map((encabezado) => {
+          const valor = fila[encabezado] ?? "";
+          return ["string", "number", "boolean"].includes(typeof valor)
+            ? valor
+            : String(valor);
+        })
+      );
+      const hoja = workbook.addWorksheet(nombre);
+
+      hoja.addRow(encabezados).eachCell((cell) => {
+        cell.style = {
+          font: { bold: true, color: { argb: "FFFFFFFF" } },
+          fill: { type: "pattern", pattern: "solid", fgColor: { argb: "FF4472C4" } },
+          alignment: { horizontal: "center" }
+        };
+      });
+
+      filasExcel.forEach((fila) => {
+        hoja.addRow(fila);
+      });
+
+      encabezados.forEach((encabezado, indice) => {
+        const anchoMaximo = filasExcel.reduce(
+          (ancho, fila) => Math.max(ancho, String(fila[indice] ?? "").length),
+          encabezado.length
+        );
+        hoja.getColumn(indice + 1).width = Math.min(anchoMaximo + 2, 48);
+      });
+    };
+
+    agregarHojaColeccion("Pedidos", snapshotPedidos.docs);
+    agregarHojaColeccion("Productos", snapshotProductos.docs);
+    agregarHojaColeccion("Usuarios", snapshotUsuarios.docs);
+
+    const archivoExcel = await workbook.xlsx.writeBuffer();
+    const nombreArchivo = `exportacion-datos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${nombreArchivo}"`
+    );
+    return res.status(200).send(Buffer.from(archivoExcel));
+  } catch (error) {
+    console.error("Error al generar el reporte analítico:", error);
+    if (res.headersSent) {
+      return res.destroy(error);
+    }
+    return res.status(500).json({
+      mensaje: "Error al procesar los datos para el cubo OLAP.",
+      error: error.message
+    });
+  }
+};

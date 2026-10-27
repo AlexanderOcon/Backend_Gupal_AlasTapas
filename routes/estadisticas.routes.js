@@ -1,6 +1,9 @@
 import express from "express";
 import { obtenerEstadisticas } from "../controllers/estadisticas.controller.js";
-import { exportarEstadisticasExcel } from "../controllers/exportacion.controllers.js";
+import {
+  exportarEstadisticasExcel,
+  exportarOlapExcel
+} from "../controllers/exportacion.controllers.js";
 import { capturarInfoSolicitud } from "../middlewares/auditoria.js";
 
 const router = express.Router();
@@ -12,5 +15,6 @@ router.get("/estadisticas", obtenerEstadisticas);
 
 // Descarga el archivo Excel
 router.get("/estadisticas/excel", exportarEstadisticasExcel);
+router.get("/exportar-olap", exportarOlapExcel);
 
 export default router;
